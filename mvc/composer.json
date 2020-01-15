@@ -1,0 +1,23 @@
+{
+    "name": "ginv2/mvc",
+    "authors": [
+        {
+            "name": "TT",
+            "email": "thaitph06858@fpt.edu.vn"
+        }
+    ],
+    "require": {
+        "phpmailer/phpmailer": "^6.0",
+        "illuminate/database": "*",
+        "jenssegers/blade": "^1.2",
+        "phroute/phroute": "^2.1"
+    },
+    "autoload": {
+        "psr-4": {
+        	"Models\\": "models/",
+        	"Controllers\\": "controllers/",
+            "Routes\\": "routes/",
+            "Validation\\": "validation/"      
+        }
+    }
+}

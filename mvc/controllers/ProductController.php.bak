@@ -1,0 +1,191 @@
+<?php 
+	namespace Controllers;
+	use Models\Product;
+	use Models\Category;
+	use Models\ProductGalleries;
+
+	class ProductController extends BaseController {
+		function list() {
+			$keyword = isset($_GET['keyword']) == true ? $_GET['keyword'] : null;
+			$cate_id = isset($_GET['cate_id']) == true ? $_GET['cate_id'] : null;
+			$query = Product::where('name', 'like', "%$keyword%");
+			if($cate_id != null){
+				$query->where('cate_id', $cate_id);
+			}
+			$products = $query->get();
+			$cates = Category::all();
+			return $this->render('admin.products.list', [	
+				'keyword' => $keyword,
+				'cate_id' => $cate_id,
+				'products' => $products,
+				'cates' => $cates
+			]);
+		}
+		public function addForm(){
+			$categories = Category::all();
+			return $this->render('admin.products.add-form', ['categories' => $categories]);
+		}
+		public function saveAdd(){
+			$products = Product::all();
+			$nameErr = "";
+			$imgErr = "";
+			$priceErr = "";
+			$short_descErr = "";
+			$detail = "";
+
+			$err = false;
+			// Validate name
+			if (strlen($_POST['name']) == 0 ) {
+				$err = true;
+				$nameErr = "Vui lòng nhập tên sản phẩm";
+			} else if (strlen($_POST['name']) >= 255 ) {
+				$err = true;
+				$nameErr = "Số lượng ký tự không vượt quá 255";
+			} 
+			foreach ($products as $key => $value) {
+				if ($value->name == $_POST['name']) {
+					$err = true;
+					$nameErr = "Tên sản phẩm đã bị trùng. Vui lòng nhập lại";
+				}
+			}
+			if (preg_match('/[!@#$%^&*()+=\-\[\]\';,.\/{}|":<>?~\\\\]/', $_POST['name'])) {
+				$err = true;
+				$nameErr = "Tên sản phẩm không chứa ký tự đặc biệt! Chỉ cho phép a-z, A-Z, 0-9";
+			} 
+
+			// Validate Img
+			$allowed =  ['gif','png' ,'jpg', 'jpeg'];
+			$ext = pathinfo($_FILES['image']['name'], PATHINFO_EXTENSION);
+			if($_FILES['image']['size'] == 0 || !in_array($ext,$allowed) ) {
+				$err = true;
+				$imgErr = "Vui lòng chọn đúng định dạng file (gif, png, jpg, jpeg)";
+			}
+
+			if($err == true){
+				$categories = Category::all();
+				return $this->render('admin.products.add-form', [
+					'categories' => $categories,
+					'nameErr' => $nameErr,
+					'imgErr' => $imgErr
+				]);
+			}
+
+			// Validate Galleries
+			if (isset($_FILES['galleries'])) {
+				$galleries = $_FILES['galleries'];
+				$galleriesName = "";
+				for ($i=0; $i < count($galleries['name']); $i++) { 
+					$allowed =  ['gif','png' ,'jpg', 'jpeg'];
+					$oriGalleryName = $galleries['name'][$i];
+					$comp = pathinfo($oriGalleryName, PATHINFO_EXTENSION);
+					if($galleries['size'][$i] == 0 || !in_array($comp,$allowed)){
+						$err = true;
+						$galleryNameErr = "Vui lòng chọn đúng định dạng file (gif, png, jpg, jpeg)";
+					}
+				}
+			}
+
+			$galleries = $_FILES['galleries'];
+			$image = $_FILES['image'];
+			$imgLink = null;
+
+			if ($image['size'] > 0){
+				$filename = 'public/' . uniqid() .'-'. $image['name'];
+				move_uploaded_file($image['tmp_name'],  './'.$filename);
+				$imgLink = getUrl($filename);
+			}
+
+			$model = new Product();
+			$model->name = $_POST['name'];
+			$model->image = $imgLink;
+			$model->cate_id = $_POST['cate_id'];
+			$model->price = $_POST['price'];
+			$model->short_desc = $_POST['short_desc'];
+			$model->detail = $_POST['detail'];
+			die();
+			$model->save();
+			$model->id;
+
+			if (isset($_FILES['galleries'])) {
+				for ($i=0; $i < count($galleries['name']); $i++) { 
+					if($galleries['size'][$i] > 0){
+						$galleriesName = 'public/' . uniqid() . '-' . $galleries['name'][$i];
+						move_uploaded_file($galleries['tmp_name'][$i], $galleriesName);
+						$galleriesName = getUrl($galleriesName);
+
+						$sqlQueryGalleries = [
+							'product_id' => $model->id,
+							'img_url' => $galleriesName
+						];
+						$insNewProdGalleries = new ProductGalleries();
+						$insNewProdGalleries->insert($sqlQueryGalleries);
+					}
+				}
+			}
+			header('location: ' . getUrl('product/'));
+		}
+		public function editForm($id){
+			$product = Product::find($id);
+			$categories = Category::all();
+			$galleries = ProductGalleries::where('product_id', '=', "$id")->get();
+			return $this->render('admin.products.edit-form', 
+				[
+					'product' => $product,
+					'categories' => $categories,
+					'galleries' => $galleries
+				]);
+		}
+		public function saveEdit($id){
+			$model = Product::find($id);
+			if (isset($_FILES['galleries'])) {
+				$galleries = $_FILES['galleries'];
+				for ($i=0; $i < count($galleries['name']); $i++) { 
+					if($galleries['size'][$i] > 0){
+						$galleriesName = 'public/' . uniqid() . '-' . $galleries['name'][$i];
+						move_uploaded_file($galleries['tmp_name'][$i], $galleriesName);
+						$galleriesName = getUrl($galleriesName);
+						$sqlQueryGalleries = [
+							'product_id' => $id,
+							'img_url' => $galleriesName
+						];
+						$insNewProdGalleries = new ProductGalleries();
+						$insNewProdGalleries->insert($sqlQueryGalleries);
+					}
+				}
+			}
+
+			$imgLink = $model->image; 
+			if (isset($_FILES['image'])) {
+				$image = $_FILES['image'];
+				if ($image['size'] > 0){
+					$filename = 'public/' . uniqid() .'-'. $image['name'];
+					move_uploaded_file($image['tmp_name'],  './'.$filename);
+					$imgLink = getUrl($filename);
+				}
+			}
+			
+			if (isset($_POST['deleteCheckbox'])) {
+				$deleteCheckbox = $_POST['deleteCheckbox'];
+				ProductGalleries::destroy($deleteCheckbox);
+			}
+			
+			$model->name = $_POST['name'];
+			$model->image = $imgLink;
+			$model->cate_id = $_POST['cate_id'];
+			$model->price = $_POST['price'];
+			$model->short_desc = $_POST['short_desc'];
+			$model->detail = $_POST['detail'];
+			$model->save();
+			header('location: ' . getUrl('admin/product/list'));
+		}
+		public function remove($id){
+			Product::destroy($id);
+			header('location: ' . getUrl('admin/product/list'));
+		}
+		public function deleteCheckbox(){
+			$getCheckbox = $_POST['checkbox'];
+			Product::destroy($getCheckbox);
+			header('location: ' . getUrl('admin/product/list'));
+		}
+	}
+?>
